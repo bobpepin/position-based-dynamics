@@ -1,0 +1,13 @@
+<script>
+let wasm;
+async function init_wasm(uri) {
+    const response = await fetch(uri);
+    const buffer = await response.arrayBuffer();
+    const import_obj = {
+        memory: new WebAssembly.Memory({initial: 1024, maximum: 1024})
+    }
+    wasm = await WebAssembly.instantiate(buffer, import_obj);
+}
+    
+init_wasm("target/wasm32-unknown-unknown/release/position_based_dynamics.wasm");
+</script>

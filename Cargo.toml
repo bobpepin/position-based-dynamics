@@ -1,0 +1,16 @@
+[package]
+name = "position-based-dynamics"
+version = "0.1.0"
+edition = "2021"
+
+[profile.release]
+lto = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+wee_alloc = "0.4"
+nalgebra = "0.31"
