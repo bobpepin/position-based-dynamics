@@ -13,7 +13,7 @@ pub extern fn add(a: u32, b: u32) -> u32 {
     return a + b;
 }
 
-#[repr(C)]
+#[repr(C, u32)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum Geometry {
     None,
@@ -46,10 +46,10 @@ impl Position {
 }
 
 #[no_mangle]
-pub extern fn allocStateVector(n: usize) -> *mut Vec<Position> {
+pub extern fn allocPositionVector(n: usize) -> *mut Vec<Position> {
     let init_elt = Position { 
-        x: Vector3::new(0.0, 0.0, 0.0), 
-        q: Quaternion::new(0.0, 0.0, 0.0, 0.0) 
+        x: Vector3::zeros(),
+        q: Quaternion::identity()
     };
     let v = vec![init_elt; n];
     return Box::into_raw(Box::new(v))
@@ -81,7 +81,7 @@ fn get_data_pointer<T>(ptr: *const Vec<T>) -> *const T {
 }
 
 #[no_mangle]
-pub extern fn getStatePointer(ptr: *const Vec<Position>) -> *const Position {
+pub extern fn getPositionPointer(ptr: *const Vec<Position>) -> *const Position {
     return get_data_pointer(ptr);
 }
 
@@ -106,7 +106,7 @@ fn detect_intersection(p1: Position, g1: Geometry, p2: Position, g2: Geometry) -
 fn compute_delta(p1: Position, g1: Geometry, p2: Position, g2: Geometry) -> Position {
     match (g1, g2) {
         (Geometry::Ball { radius: r1 }, Geometry::Ball { radius: r2 }) => {
-            let v = p2.x - p1.x; // This is the inverse of the paper
+            let v = p2.x - p1.x; // This is the opposite sign as in the paper
             let distance = v.norm();
             let delta_norm = r1 + r2 - distance;
             let delta = delta_norm * (v / distance);
@@ -168,6 +168,29 @@ pub extern fn solvePositions(
     }
     solve_positions(positions_ref, geometries_ref, bodies_ref);
 }
+
+#[no_mangle]
+pub extern fn fillExampleData(
+    positions_ptr: *mut Vec<Position>,
+    geometries_ptr: *mut Vec<Geometry>,
+    bodies_ptr: *mut Vec<Body>,
+    count: usize
+) {
+    let positions;
+    let geometries;
+    let bodies;
+    unsafe {
+        positions = &mut *positions_ptr;
+        geometries = &mut *geometries_ptr;
+        bodies = &mut *bodies_ptr;
+    }
+    for i in 0..count {
+        positions[i].x = Vector3::zeros();
+        geometries[i] = Geometry::Ball { radius: 0.1 };
+        bodies[i].inv_mass = 1.0;
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

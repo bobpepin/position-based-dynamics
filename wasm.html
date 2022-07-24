@@ -1,13 +1,96 @@
+<!doctype html>
+
+<canvas id="canvas" width=512 height=512 style="width: 512px; height: 512px;">
+    
+</canvas>
+
 <script>
-let wasm;
-async function init_wasm(uri) {
-    const response = await fetch(uri);
-    const buffer = await response.arrayBuffer();
-    const import_obj = {
-        memory: new WebAssembly.Memory({initial: 1024, maximum: 1024})
+class PositionBasedDynamics {
+    async init(uri, num_objects) {
+        const response = await fetch(uri);
+        const buffer = await response.arrayBuffer();
+        this.wasm = await WebAssembly.instantiate(buffer);
+        let exports = this.exports = this.wasm.instance.exports;
+        const N = num_objects || 1024;        
+        this.memory = exports.memory;
+        this.positionVector = exports.allocPositionVector(N);
+        this.positionOffset = exports.getPositionPointer(this.positionVector);
+        this.geometryVector = exports.allocGeometryVector(N);
+        this.geometryOffset = exports.getGeometryPointer(this.geometryVector);
+        this.bodyVector = exports.allocBodyVector(N);        
+//        console.log("N", N);
+        const positionStride = this.positionStride = 7;
+        this.positions = new Float32Array(
+            this.memory.buffer,
+            this.positionOffset,
+            positionStride*N
+        );        
+        const geometryStride = this.geometryStride = 4;
+        this.geometries = new Float32Array(
+            this.memory.buffer,
+            this.geometryOffset,
+            geometryStride*N
+        );
+        
+        const sample_count = 8;
+        exports.fillExampleData(this.positionVector, this.geometryVector, this.bodyVector, sample_count);
+        for(let i=0; i < sample_count; i++) {
+            for(let j=0; j < 2; j++) {
+                this.positions[i*positionStride+j] = Math.random() * 2.0 - 1.0;
+            }
+            this.geometries[i*geometryStride+1] = (Math.random() + 0.6) * 0.1;
+        }
     }
-    wasm = await WebAssembly.instantiate(buffer, import_obj);
+    
+    solvePositions() {
+        this.exports.solvePositions(this.positionVector, this.geometryVector, this.bodyVector);
+    }
+}
+
+function drawPositions(pbd, count) {
+    const s = pbd.positionStride;
+    const canvas = document.querySelector("#canvas");
+    canvas.width = canvas.width;
+    const ctx = canvas.getContext("2d");
+    for(let i=0; i < count; i++) {
+        const x = (pbd.positions[i*s+0] + 1) / 2 * canvas.width;
+        const y = (pbd.positions[i*s+1] + 1) / 2 * canvas.height;
+        const radius = pbd.geometries[i*pbd.geometryStride+1] / 2 * canvas.width;
+//         const radius = 0.1/2 * canvas.width;
+        ctx.beginPath();
+        ctx.ellipse(x, y, radius, radius, 0, 0, 2*Math.PI);
+        ctx.stroke();
+    }
 }
     
-init_wasm("target/wasm32-unknown-unknown/release/position_based_dynamics.wasm");
+function evolvePositions(pbd, count, dt, time) {
+    const s = pbd.positionStride;
+    for(let i=0; i < count; i++) {
+        pbd.positions[i*s+0] -= 0.5 * pbd.positions[i*s+0] * dt;
+        pbd.positions[i*s+1] -= 0.5 * pbd.positions[i*s+1] * dt;
+        pbd.geometries[i*pbd.geometryStride+1] += 0.01*Math.cos(time) * dt;
+    }
+}
+
+function waitForAnimationFrame() {
+    return new Promise((resolve, reject) => requestAnimationFrame(time => resolve(time )));
+}
+
+async function run(pbd) {
+    await pbd.init("target/wasm32-unknown-unknown/release/position_based_dynamics.wasm");
+    let time = await waitForAnimationFrame() / 1000;
+    drawPositions(pbd, 8);
+    while(true) {
+        const new_time = await waitForAnimationFrame() / 1000;
+        const dt = new_time - time;
+        time = new_time;
+        evolvePositions(pbd, 8, dt, time);
+        pbd.solvePositions();
+        drawPositions(pbd, 8);
+    }
+}
+
+var pbd = new PositionBasedDynamics();
+run(pbd)
+
 </script>
